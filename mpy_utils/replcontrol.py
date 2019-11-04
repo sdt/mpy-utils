@@ -9,6 +9,7 @@ import select
 import os
 import fcntl
 
+
 class ReplControlFH(object):
     def __init__(
         self, infh=sys.stdin, outfh=sys.stdout, delay=0, debug=False, reset=True
@@ -30,17 +31,18 @@ class ReplControlFH(object):
             atexit.register(self.reset)
 
     def readbytes(self):
-        done = False
+        # Just keep trying to read a byte until there's none left to read
         buf = b""
-        while not done:
-            try:
-                buf += self.infh.read(1)
-            except IOError:
-                done = True
+        while True:
+            data = self.infh.buffer.read(1)
+            if data == None:
+                break
+            buf += data
         return buf
 
     def writebytes(self, data):
-        self.outfh.write(data)
+        self.outfh.buffer.write(data)
+        self.outfh.buffer.flush()
 
     def response(self, end=b"\x04"):
         while True:
@@ -65,8 +67,8 @@ class ReplControlFH(object):
                     self.log("Forcefully breaking the boot.py")
                 self.writebytes(b"\x03\x03\x01\x04")
             time.sleep(self.delay / 1000.0)
-        #self.port.reset_input_buffer()
-        self.readbytes() # is this equivalent to resetting the input buffer?
+        # self.port.reset_input_buffer()
+        self.readbytes()  # is this equivalent to resetting the input buffer?
 
     def reset(self):
         self.writebytes(b"\x02\x03\x03\x04")
@@ -106,6 +108,7 @@ class ReplControlFH(object):
 
     def log(self, msg):
         print(msg, file=sys.stderr)
+
 
 class ReplControl(object):
     def __init__(
