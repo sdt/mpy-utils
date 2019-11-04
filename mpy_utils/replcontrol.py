@@ -1,8 +1,111 @@
+from __future__ import print_function
+
 import serial
 import string
 import atexit
 import time
+import sys
+import select
+import os
+import fcntl
 
+class ReplControlFH(object):
+    def __init__(
+        self, infh=sys.stdin, outfh=sys.stdout, delay=0, debug=False, reset=True
+    ):
+        self.infh = infh
+        self.outfh = outfh
+        self.buffer = b""
+        self.delay = delay
+        self.debug = debug
+
+        # Set stdin to non-blocking
+        fd = self.infh.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+        self.initialize()
+
+        if reset:
+            atexit.register(self.reset)
+
+    def readbytes(self):
+        done = False
+        buf = b""
+        while not done:
+            try:
+                buf += self.infh.read(1)
+            except IOError:
+                done = True
+        return buf
+
+    def writebytes(self, data):
+        self.outfh.write(data)
+
+    def response(self, end=b"\x04"):
+        while True:
+            self.buffer += self.readbytes()
+            try:
+                r, self.buffer = self.buffer.split(end, 1)
+                return r
+            except ValueError:
+                return self.buffer
+                pass
+
+    def initialize(self):
+        # break, break, raw mode, reboot
+        self.writebytes(b"\x03\x03\x01\x04")
+        start = time.time()
+        while True:
+            resp = self.readbytes()
+            if resp.endswith(b"\r\n>"):
+                break
+            elif time.time() - start > 3:
+                if self.debug:
+                    self.log("Forcefully breaking the boot.py")
+                self.writebytes(b"\x03\x03\x01\x04")
+            time.sleep(self.delay / 1000.0)
+        #self.port.reset_input_buffer()
+        self.readbytes() # is this equivalent to resetting the input buffer?
+
+    def reset(self):
+        self.writebytes(b"\x02\x03\x03\x04")
+
+    def command(self, cmd):
+        if self.debug:
+            self.log(">>> %s" % cmd)
+        self.writebytes(cmd.encode("ASCII") + b"\x04")
+        time.sleep(self.delay / 1000.0)
+        ret = self.response()
+        err = self.response(b"\x04>")
+
+        if ret.startswith(b"OK"):
+            if err:
+                if self.debug:
+                    self.log("<<< %s" % err)
+                return err
+            elif len(ret) > 2:
+                if self.debug:
+                    self.log("<<< %s" % ret[2:])
+                try:
+                    return eval(ret[2:], {"__builtins__": {}}, {})
+                except SyntaxError as e:
+                    return e
+            else:
+                return None
+
+    def statement(self, func, *args):
+        return self.command(func + repr(tuple(args)))
+
+    def function(self, func, *args):
+        command = "print(repr(%s))" % (func + repr(tuple(args)))
+        return self.command(command)
+
+    def variable(self, func, *args):
+        return ReplControlVariable(self, func, *args)
+
+    def log(self, msg):
+        print(msg, file=sys.stderr)
 
 class ReplControl(object):
     def __init__(
