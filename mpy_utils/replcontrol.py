@@ -115,6 +115,9 @@ class ReplControl(object):
         self, port="/dev/ttyUSB0", baud=115200, delay=0, debug=False, reset=True
     ):
         self.port = serial.Serial(port, baud, timeout=2)
+        self.port.dtr = 0
+        self.port.rts = 0
+
         self.buffer = b""
         self.delay = delay
         self.debug = debug
@@ -123,12 +126,18 @@ class ReplControl(object):
         if reset:
             atexit.register(self.reset)
 
+    def writebytes(self, data):
+        self.port.write(data)
+
+    def readbytes(self):
+        bytes_to_read = self.port.inWaiting()
+        if not bytes_to_read:
+            time.sleep(self.delay / 1000.0)
+        return self.port.read(bytes_to_read)
+
     def response(self, end=b"\x04"):
         while True:
-            bytes_to_read = self.port.inWaiting()
-            if not bytes_to_read:
-                time.sleep(self.delay / 1000.0)
-            self.buffer += self.port.read(bytes_to_read)
+            self.buffer += self.readbytes()
             try:
                 r, self.buffer = self.buffer.split(end, 1)
                 return r
@@ -136,29 +145,28 @@ class ReplControl(object):
                 pass
 
     def initialize(self):
-        self.port.dtr = 0
-        self.port.rts = 0
         # break, break, raw mode, reboot
-        self.port.write(b"\x03\x03\x01\x04")
+        self.writebytes(b"\x03\x03\x01\x04")
         start = time.time()
         while True:
-            resp = self.port.read_all()
+            resp = self.readbytes()
             if resp.endswith(b"\r\n>"):
                 break
             elif time.time() - start > 3:
                 if self.debug:
                     print("Forcefully breaking the boot.py")
-                self.port.write(b"\x03\x03\x01\x04")
+                self.writebytes(b"\x03\x03\x01\x04")
             time.sleep(self.delay / 1000.0)
-        self.port.reset_input_buffer()
+        # self.port.reset_input_buffer()
+        self.readbytes()    # is this equivalent to resetting the input buffer
 
     def reset(self):
-        self.port.write(b"\x02\x03\x03\x04")
+        self.writebytes(b"\x02\x03\x03\x04")
 
     def command(self, cmd):
         if self.debug:
             print(">>> %s" % cmd)
-        self.port.write(cmd.encode("ASCII") + b"\x04")
+        self.writebytes(cmd.encode("ASCII") + b"\x04")
         time.sleep(self.delay / 1000.0)
         ret = self.response()
         err = self.response(b"\x04>")
