@@ -5,7 +5,7 @@ import argparse
 import os.path
 import sys
 
-from mpy_utils.replcontrol import ReplControl, ReplControlFH
+from mpy_utils.replcontrol import ReplControl, ReplIOSerial, ReplIOFileHandle
 
 parser = argparse.ArgumentParser(
     description="upload files to a device using only the REPL"
@@ -28,21 +28,13 @@ parser.add_argument("files", nargs="*", type=argparse.FileType("rb"))
 args = parser.parse_args()
 
 if args.stdio:
-    repl_control = ReplControlFH(
-        infh=sys.stdin,
-        outfh=sys.stdout,
-        delay=args.delay,
-        debug=args.debug,
-        reset=args.reset,
-    )
+    repl_io = ReplIOFileHandle(infh=sys.stdin, outfh=sys.stdout)
 else:
-    repl_control = ReplControl(
-        port=args.port,
-        baud=args.baud,
-        delay=args.delay,
-        debug=args.debug,
-        reset=args.reset,
-    )
+    repl_io = ReplIOSerial(port=args.port, baud=args.baud, delay=args.delay)
+
+repl_control = ReplControl(
+    io=repl_io, delay=args.delay, debug=args.debug, reset=args.reset,
+)
 
 for fh in args.files:
     path, name = os.path.split(fh.name)
