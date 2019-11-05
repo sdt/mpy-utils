@@ -82,7 +82,6 @@ class ReplControl(object):
                 r, self.buffer = self.buffer.split(end, 1)
                 return r
             except ValueError:
-                return self.buffer
                 pass
 
     def initialize(self):
