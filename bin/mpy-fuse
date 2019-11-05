@@ -35,8 +35,11 @@ except FileExistsError:
 
 if args.stdio:
     repl_io = ReplIOFileHandle(infh=sys.stdin, outfh=sys.stdout)
+    # use the inode as the fs identifier - not sure what else to use
+    fsname="mpy-fuse:%s" % os.fstat(sys.stdin.fileno()).st_ino
 else:
     repl_io = ReplIOSerial(port=args.port, baud=args.baud, delay=args.delay)
+    fsname="mpy-fuse:%s" % args.port,
 
 repl_control = ReplControl(
     io=repl_io, delay=args.delay, debug=args.debug, reset=args.reset,
@@ -44,7 +47,7 @@ repl_control = ReplControl(
 
 fuse.FUSE(
     operations=ReplFuseOps(repl_control, base_path=args.base),
-    fsname="mpy-fuse:%s" % args.port,
+    fsname=fsname,
     mountpoint=args.mount_point,
     nothreads=True,
     foreground=True,
