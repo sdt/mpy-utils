@@ -3,24 +3,10 @@ import string
 import atexit
 import time
 import sys
-import select
 import os
 import fcntl
 
-from abc import ABC, abstractmethod
-
-
-class ReplIO(ABC):
-    @abstractmethod
-    def readbytes(self):
-        pass
-
-    @abstractmethod
-    def writebytes(self):
-        pass
-
-
-class ReplIOSerial(ReplIO):
+class ReplIOSerial(object):
     def __init__(self, port="/dev/ttyUSB0", baud=115200, delay=0):
         self.port = serial.Serial(port, baud, timeout=2)
         self.delay = delay
@@ -38,7 +24,7 @@ class ReplIOSerial(ReplIO):
         return self.port.read(bytes_to_read)
 
 
-class ReplIOFileHandle(ReplIO):
+class ReplIOFileHandle(object):
     def __init__(self, infh=sys.stdin, outfh=sys.stdout):
         self.infh = infh
         self.outfh = outfh
