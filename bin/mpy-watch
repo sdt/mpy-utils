@@ -8,6 +8,8 @@ import re
 import difflib
 import stat
 import sys
+import pickle
+from pathlib import Path
 
 from mpy_utils.replcontrol import ReplControl, ReplIOFileHandle, ReplIOSerial
 
@@ -33,6 +35,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "--debug", default=False, action="store_true", help="print debugging info"
+)
+parser.add_argument(
+    "--once", default=False, action="store_true", help="run once and exit"
 )
 parser.add_argument("source_dir", type=str, default=".")
 parser.add_argument("dest_dir", type=str, default="/", nargs="?")
@@ -74,7 +79,7 @@ def ensure_dir_exists(dest_path):
 temporary_file_name = os.path.join(args.dest_dir, ".temporary")
 
 
-def sync_files(file_list, file_cache={}):
+def sync_files(file_list, file_cache):
 
     initialized = False
 
@@ -190,8 +195,24 @@ def log(msg):
 if args.download:
     download_files(args.source_dir)
 
+def init_cache(filename):
+    if not filename.exists():
+        return { }
+    with filename.open('rb') as fh:
+        return pickle.load(fh)
+
+def save_cache(filename, data):
+    with filename.open('wb') as fh:
+        pickle.dump(data, fh)
+
+cache_filename = Path(args.source_dir) / ".mpy-watch.pickle"
+cache = init_cache(cache_filename)
+
 while True:
     files = list(make_file_list(args.source_dir))
-    sync_files(files)
+    sync_files(files, cache)
+    save_cache(cache_filename, cache)
+    if args.once:
+        break
 
     time.sleep(1)
